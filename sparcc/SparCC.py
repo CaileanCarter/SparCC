@@ -2,19 +2,14 @@
 Main functions for estimating SparCC
 '''
 from glob import glob
-from numba import njit
 from typing import List,Any
 
-import h5py
 import warnings
 import logging
-import dask.array as da
 import numpy as np
-
 
 from .core_methods import to_fractions
 from .compositional_methods import run_clr,variation_mat
-
 
 try:
     from scipy.stats import nanmedian
@@ -22,7 +17,6 @@ except ImportError:
     from numpy import nanmedian
 
 
-@njit()
 def Mesh(a:int):
     '''simple version of : 
     https://numpy.org/doc/stable/reference/generated/numpy.meshgrid.html
@@ -60,16 +54,9 @@ def basis_var(Var_mat,M,V_min:float=1e-4):
     The element of V_mat are refered to as t_ij in the SparCC paper.
     '''
 
-    if isinstance(Var_mat,np.ndarray):
-        Var_mat=da.from_array(Var_mat)
-
-    if isinstance(M,np.ndarray):
-        M=da.from_array(M)
-
-    V_min=V_min
-    V_vec  = Var_mat.sum(axis=1).compute()
-    V_base=da.linalg.solve(M,V_vec)
-    basis_variance=da.where(V_base <= 0,V_min,V_base).compute()
+    V_vec  = Var_mat.sum(axis=1)
+    V_base=np.linalg.solve(M,V_vec)
+    basis_variance=np.where(V_base <= 0,V_min,V_base)
     return basis_variance
 
 
@@ -256,45 +243,16 @@ def main_alg(frame,method:str='sparcc',
         Estimated basis covariance matrix.
 
     '''
+    fracs = to_fractions(frame, method=norm)
+    cor_sparse, cov_sparse = basic_corr(fracs, method=method,th=th,x_iter=x_iter)
+    var_cov=np.diag(cov_sparse)
         
-    if method in ['sparcc', 'clr']:
-        for i in range(n_iter):
-            if verbose: print ('\tRunning iteration '+ str(i))
-            logging.info("Running iteration {}".format(i))
-            fracs = to_fractions(frame, method=norm)
-            cor_sparse, cov_sparse = basic_corr(fracs, method=method,th=th,x_iter=x_iter)
-            var_cov=np.diag(cov_sparse)
-            #Create files 
-            
-            file_name_cor=path_subdir_cor+'/cor_{:08d}.hdf5'.format(i)
-            file_name_cov=path_subdir_cov+'/cov_{:08d}.hdf5'.format(i)
+    var_med=np.nanmedian(cov_sparse,axis=0)
+    cor_med=np.nanmedian(cor_sparse,axis=0)
 
-            h5f_cor=h5py.File(file_name_cor,'w')
-            h5f_cov=h5py.File(file_name_cov,'w')
-            h5f_cor.create_dataset('dataset',data=cor_sparse,shape=cor_sparse.shape)
-            h5f_cov.create_dataset('dataset',data=var_cov,shape=var_cov.shape)
-            h5f_cor.close()
-            h5f_cov.close()
+    x,y=Mesh(var_med)
+    cov_med=cor_med*x**0.5*y**0.5
+    logging.info("The main process has finished")
 
-        logging.info("Processing the files from data directory")
-        filenames_cor=sorted([f for f in glob('data' + "**/corr_files/*", recursive=True)])
-        filenames_cov=sorted([f for f in glob('data' + "**/cov_files/*", recursive=True)])
-        dsets_cor = [h5py.File(filename, mode='r') for filename in filenames_cor]
-        dsets_cov = [h5py.File(filename, mode='r') for filename in filenames_cov]
-        arrays_cor = [da.from_array(dset['dataset']) for dset in dsets_cor]
-        arrays_cov = [da.from_array(dset['dataset']) for dset in dsets_cov]
-
-        cor_array = da.asarray(arrays_cor)
-        cov_array = da.asarray(arrays_cov)
-
-        var_med=da.nanmedian(cov_array,axis=0).compute()
-        cor_med=da.nanmedian(cor_array,axis=0).compute()
-        
-        var_med=var_med
-
-        x,y=Mesh(var_med)
-        cov_med=cor_med*x**0.5*y**0.5
-        logging.info("The main process has finished")
-
-        return cor_med,cov_med
+    return cor_med,cov_med
 
