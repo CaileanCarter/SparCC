@@ -198,11 +198,7 @@ def main_alg(frame,method:str='sparcc',
              th:float=0.1,
              x_iter:int=10,
              n_iter:int=20,
-             norm:str='dirichlet',
-             log:bool=True,
-             path_subdir_cor:str='./',
-             path_subdir_cov:str='./',
-             verbose:bool=True):
+             norm:str='dirichlet'):
     '''
     The main function to organize the execution of the algorithm and the 
     processing of temporary files in hdf5 format.
@@ -227,13 +223,6 @@ def main_alg(frame,method:str='sparcc',
         Number of estimation iteration to average over.
     norm : str,(dirichlet|norm),defualt: dirichlet
         Method used to normalize the counts to fractions.
-    log : bool, default True
-        log-transform fraction? used if method ~= SparCC/CLR
-    path_subdir_cor:str,default './'
-        Folder path for the temporary correlation estimates file.
-    path_subdir_cov:str,default './'
-        Folder path for the temporary covariance estimates file
-    verbose : bool, default True 
 
     Returns
     -------
